@@ -3,8 +3,6 @@ package com.nguonc
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
 import java.net.URLEncoder
 
 class NguonCProvider : MainAPI() {
@@ -36,12 +34,15 @@ class NguonCProvider : MainAPI() {
             item.toSearchResponse()
         } ?: emptyList()
 
+        val currentPage = response?.paginate?.currentPage ?: 1
+        val totalPages = response?.paginate?.totalPages ?: 1
+
         return newHomePageResponse(
             list = HomePageList(
                 name = request.name,
                 list = homeItems
             ),
-            hasNext = response?.paginate?.currentPage ?: 1 < (response?.paginate?.totalPages ?: 1)
+            hasNext = currentPage < totalPages
         )
     }
 
@@ -66,29 +67,33 @@ class NguonCProvider : MainAPI() {
         val description = movie.description
         val year = movie.year
 
-        val episodes = mutableListOf<Episode>()
-        response.movie.episodes?.forEach { server ->
+        val episodesList = mutableListOf<Episode>()
+        movie.episodes?.forEach { server ->
             server.items?.forEach { ep ->
-                episodes.add(
-                    Episode(
-                        data = ep.embed ?: ep.m3u8 ?: "",
-                        name = ep.name ?: "Tập ${ep.slug}",
-                        episode = ep.slug?.toIntOrNull()
+                val epData = ep.embed ?: ep.m3u8 ?: ""
+                if (epData.isNotEmpty()) {
+                    episodesList.add(
+                        Episode(
+                            data = epData,
+                            name = ep.name ?: "Tập ${ep.slug ?: ""}",
+                            episode = ep.slug?.toIntOrNull()
+                        )
                     )
-                )
+                }
             }
         }
 
-        val tvType = if (episodes.size > 1) TvType.TvSeries else TvType.Movie
+        val tvType = if (episodesList.size > 1) TvType.TvSeries else TvType.Movie
 
         return if (tvType == TvType.TvSeries) {
-            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodesList) {
                 this.posterUrl = poster
                 this.plot = description
                 this.year = year
             }
         } else {
-            newMovieLoadResponse(title, url, TvType.Movie, episodes.firstOrNull()?.data ?: "") {
+            val singleLink = episodesList.firstOrNull()?.data ?: ""
+            newMovieLoadResponse(title, url, TvType.Movie, singleLink) {
                 this.posterUrl = poster
                 this.plot = description
                 this.year = year
@@ -127,12 +132,15 @@ class NguonCProvider : MainAPI() {
         return false
     }
 
-    // DATA CLASSES
+    // MAPPER & DATA CLASSES
     private fun NguonCItem.toSearchResponse(): SearchResponse? {
-        val title = name ?: return null
-        val detailApiUrl = "$mainUrl/api/film/$slug"
-        return newMovieSearchResponse(title, detailApiUrl, TvType.Movie) {
-            this.posterUrl = thumbUrl ?: posterUrl
+        val itemName = name ?: return null
+        val itemSlug = slug ?: return null
+        val detailApiUrl = "$mainUrl/api/film/$itemSlug"
+        val itemPoster = thumbUrl ?: posterUrl
+
+        return newMovieSearchResponse(itemName, detailApiUrl, TvType.Movie) {
+            this.posterUrl = itemPoster
         }
     }
 
