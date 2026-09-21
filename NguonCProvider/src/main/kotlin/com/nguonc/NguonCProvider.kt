@@ -19,7 +19,7 @@ class NguonCProvider : MainAPI() {
         TvType.Anime
     )
 
-    // 1. CẤU HÌNH TRANG CHỦ / DANH MỤC
+    // 1. TRANG CHỦ
     override val mainPage = mainPageOf(
         "$mainUrl/api/films/phim-moi-cap-nhat" to "Phim Mới Cập Nhật",
         "$mainUrl/api/films/danh-sach/phim-bo" to "Phim Bộ",
@@ -28,7 +28,7 @@ class NguonCProvider : MainAPI() {
         "$mainUrl/api/films/danh-sach/tv-shows" to "TV Shows"
     )
 
-    override async fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = "${request.data}?page=$page"
         val response = app.get(url).parsedSafe<NguonCResponse>()
         
@@ -45,8 +45,8 @@ class NguonCProvider : MainAPI() {
         )
     }
 
-    // 2. TÌM KIẾM (SEARCH) - Xử lý chuẩn space & multi-word
-    override async fun search(query: String): List<SearchResponse> {
+    // 2. TÌM KIẾM
+    override suspend fun search(query: String): List<SearchResponse> {
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
         val url = "$mainUrl/api/films/search?keyword=$encodedQuery"
         val response = app.get(url).parsedSafe<NguonCResponse>()
@@ -56,9 +56,8 @@ class NguonCProvider : MainAPI() {
         } ?: emptyList()
     }
 
-    // 3. TẢI THÔNG TIN PHIM (LOAD)
-    override async fun load(url: String): LoadResponse? {
-        // url truyền vào có dạng: https://phim.nguonc.com/api/film/{slug}
+    // 3. TẢI THÔNG TIN PHIM
+    override suspend fun load(url: String): LoadResponse? {
         val response = app.get(url).parsedSafe<NguonCDetailResponse>() ?: return null
         val movie = response.movie ?: return null
 
@@ -67,7 +66,6 @@ class NguonCProvider : MainAPI() {
         val description = movie.description
         val year = movie.year
 
-        // Phân loại Phim bộ / Phim lẻ
         val episodes = mutableListOf<Episode>()
         response.movie.episodes?.forEach { server ->
             server.items?.forEach { ep ->
@@ -98,8 +96,8 @@ class NguonCProvider : MainAPI() {
         }
     }
 
-    // 4. BÓC TÁCH LINK VIDEO (LOADLINKS) - HLS & Embed
-    override async fun loadLinks(
+    // 4. LẤY LINK VIDEO
+    override suspend fun loadLinks(
         data: String,
         isCdn: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -107,7 +105,6 @@ class NguonCProvider : MainAPI() {
     ): Boolean {
         if (data.isEmpty()) return false
 
-        // Trường hợp 1: Link trực tiếp .m3u8 (HLS)
         if (data.contains(".m3u8")) {
             callback(
                 ExtractorLink(
@@ -122,7 +119,6 @@ class NguonCProvider : MainAPI() {
             return true
         }
 
-        // Trường hợp 2: Link Iframe Embed
         if (data.startsWith("http")) {
             loadExtractor(data, mainUrl, subtitleCallback, callback)
             return true
@@ -131,7 +127,7 @@ class NguonCProvider : MainAPI() {
         return false
     }
 
-    // --- CÁC DATA CLASS BÓC TÁCH JSON API ---
+    // DATA CLASSES
     private fun NguonCItem.toSearchResponse(): SearchResponse? {
         val title = name ?: return null
         val detailApiUrl = "$mainUrl/api/film/$slug"
